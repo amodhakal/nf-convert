@@ -1,8 +1,8 @@
 class NfConvert < Formula
   desc "Patch Nerd Font glyphs into any TTF/OTF font"
   homepage "https://github.com/amodhakal/nf-convert"
-  url "https://github.com/amodhakal/nf-convert/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "85aad01ae029c7fdeff904f509c6a4f6bf5d93e65a2dd3a0657b6ab1cf7741e3"
+  url "https://github.com/amodhakal/nf-convert/archive/refs/tags/v1.0.0.tar.gz"
+  sha256 "1d6843bee33614c0b54342bc68a68498a70df733847a969737627872f080d8ff"
   license "MIT"
 
   depends_on "fontforge"
