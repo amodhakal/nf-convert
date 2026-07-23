@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+#
+# nf-convert — patch Nerd Font symbols into every TTF/OTF in the
+# directory you run it from. No arguments needed.
+#
+# Usage:
+#   cd /path/with/fonts
+#   nf-convert
+#
+set -euo pipefail
+
+prog="$(basename "$0")"
+
+usage() {
+  cat <<EOF
+Usage:
+  $prog
+
+Run this from a directory containing .ttf/.otf font files. It patches
+Nerd Font symbol glyphs into each one and writes "<name>Nerd.<ext>" next
+to the original. No input/output paths needed — it just reads the cwd.
+EOF
+}
+
+# --- locate ourselves, so this works whether run from PATH, a Homebrew
+# Cellar symlink, or straight out of a git checkout. ---
+resolve_self() {
+  local src="${BASH_SOURCE[0]}"
+  while [ -h "$src" ]; do
+    local dir
+    dir="$(cd -P "$(dirname "$src")" && pwd)"
+    src="$(readlink "$src")"
+    [[ $src != /* ]] && src="$dir/$src"
+  done
+  cd -P "$(dirname "$src")" && pwd
+}
+
+BIN_DIR="$(resolve_self)"
+PREFIX_DIR="$(dirname "$BIN_DIR")"          # .../bin/.. -> formula prefix
+LIBEXEC_DIR="$PREFIX_DIR/libexec"
+PATCH_SCRIPT="$LIBEXEC_DIR/patch_font.py"
+SYMBOLS_FONT="$LIBEXEC_DIR/SymbolsNerdFontMono-Regular.ttf"
+
+if [ ! -f "$PATCH_SCRIPT" ]; then
+  echo "error: could not find patch_font.py (looked in $LIBEXEC_DIR)" >&2
+  exit 1
+fi
+if [ ! -f "$SYMBOLS_FONT" ]; then
+  echo "error: bundled symbols font missing (looked in $SYMBOLS_FONT)" >&2
+  echo "       reinstall with: brew reinstall nf-convert" >&2
+  exit 1
+fi
+
+if ! command -v fontforge >/dev/null 2>&1; then
+  echo "error: fontforge is not installed or not on PATH" >&2
+  echo "       install with: brew install fontforge" >&2
+  exit 1
+fi
+
+patch_one() {
+  local input="$1"
+
+  # Absolute paths only — fontforge's cwd during -script execution is not
+  # guaranteed to match the shell's cwd, which is the original bug you hit.
+  input="$(cd "$(dirname "$input")" && pwd)/$(basename "$input")"
+
+  local base name ext output
+  base="$(basename "$input")"
+  name="${base%.*}"
+  ext="${base##*.}"
+  output="$(dirname "$input")/${name}Nerd.${ext}"
+
+  echo "patching: $(basename "$input") -> $(basename "$output")"
+  fontforge -quiet -lang=py -script "$PATCH_SCRIPT" "$input" "$SYMBOLS_FONT" "$output"
+}
+
+if [ $# -gt 0 ] && { [ "$1" = "-h" ] || [ "$1" = "--help" ]; }; then
+  usage
+  exit 0
+fi
+
+shopt -s nullglob
+fonts=(*.ttf *.otf)
+shopt -u nullglob
+
+# Skip files we already generated, in case someone reruns this in the same dir.
+filtered=()
+for f in "${fonts[@]}"; do
+  case "$f" in
+    *Nerd.ttf|*Nerd.otf) continue ;;
+    *) filtered+=("$f") ;;
+  esac
+done
+fonts=("${filtered[@]}")
+
+if [ ${#fonts[@]} -eq 0 ]; then
+  echo "no .ttf/.otf files found in $(pwd)" >&2
+  exit 1
+fi
+
+for f in "${fonts[@]}"; do
+  patch_one "$f"
+done
+
